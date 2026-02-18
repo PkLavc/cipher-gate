@@ -1,10 +1,12 @@
-# CipherGate Security Proxy
+# CipherGate
 
-**High-Performance Security Proxy implementing Zero-Trust Architecture (ZTA) for protecting sensitive data (PII/PHI) in transit.**
+[![Python Version](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
+[![Security](https://img.shields.io/badge/Security-Zero--Trust-red.svg)](https://github.com/PkLavc/cipher-gate)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## Executive Summary
 
-In today's interconnected digital landscape, data breaches represent one of the most significant threats to organizational security and compliance. Traditional perimeter-based security models are no longer sufficient against sophisticated cyber threats that can bypass network boundaries. CipherGate addresses this critical gap by implementing a Zero-Trust Architecture that assumes no implicit trust and verifies every access request.
+CipherGate Security Proxy implements industry-standard Zero-Trust Architecture (ZTA) for protecting sensitive data (PII/PHI) in transit. This high-performance security solution addresses critical vulnerabilities in modern digital infrastructure by implementing comprehensive data protection, authentication, and monitoring capabilities.
 
 ### The Problem
 
@@ -50,6 +52,17 @@ CipherGate implements industry-standard Zero-Trust principles to provide:
 
 ## Technical Architecture
 
+### Security Workflow
+```mermaid
+graph LR
+    A[Inbound Request] --> B[CipherGate Proxy]
+    B --> C{PII Detector}
+    C -- Sensitive Data --> D[AES-256 Masking]
+    C -- Safe Data --> E[Forward to Backend]
+    D --> E
+    E --> F[Secure Response]
+```
+
 ### Core Components
 
 #### 1. Security Proxy (`proxy.py`)
@@ -92,6 +105,13 @@ CipherGate implements industry-standard Zero-Trust principles to provide:
 - **HIPAA Compliance**: Protected Health Information (PHI) protection standards
 - **NIST Zero-Trust Framework**: Implementation of NIST SP 800-207 guidelines
 
+### Regulatory Alignment
+| Regulation | Requirement | CipherGate Implementation |
+| :--- | :--- | :--- |
+| **GDPR** | Right to Privacy | Dynamic Data Masking (PII) |
+| **HIPAA** | Technical Safeguards | AES-256 Encryption & Audit Trails |
+| **NIST 800-207** | Zero-Trust Architecture | Continuous Verification Middleware |
+
 ## National Interest Justification
 
 ### Digital Supply Chain Protection
@@ -119,6 +139,13 @@ The implementation supports protection of critical infrastructure by:
 - **Operational Efficiency**: Reduced manual security processes and incident response time
 - **Innovation Enablement**: Secure platform for digital transformation initiatives
 
+### Security Standards Impact
+| Feature | Implementation | Benefit |
+| :--- | :--- | :--- |
+| **Data Masking** | Regex-based PII identification | Compliance with GDPR/LGPD |
+| **Encryption** | AES-256-GCM | Military-grade data protection |
+| **Zero-Trust** | JWT-based auth verification | Prevents unauthorized lateral movement |
+
 ## Installation and Usage
 
 ### Prerequisites
@@ -130,7 +157,7 @@ The implementation supports protection of critical infrastructure by:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/cipher-gate.git
+git clone https://github.com/PkLavc/cipher-gate.git
 cd cipher-gate
 
 # Install dependencies
@@ -209,6 +236,18 @@ The security test suite validates:
 
 ## Compliance and Auditing
 
+### Audit Log Example
+```json
+{
+  "event": "pii_masking_applied",
+  "source_ip": "192.168.1.50",
+  "endpoint": "/v1/user/data",
+  "masked_fields": ["email", "credit_card"],
+  "algorithm": "AES-256-GCM",
+  "status": "success"
+}
+```
+
 ### Audit Trail Features
 
 - **Cryptographic Chaining**: Each log entry cryptographically linked to previous
@@ -273,12 +312,11 @@ The security test suite validates:
 - **Training Programs**: Zero-Trust architecture training
 - **Compliance Consulting**: Regulatory compliance guidance
 
-## License and Usage
+## Author
 
-This project is provided as a reference implementation for educational and professional portfolio purposes. While the code implements industry-standard security practices, organizations should conduct their own security assessments before production deployment.
-
-For questions, contributions, or professional support, please contact the development team.
+**Patrick - Computer Engineer** To view other projects and portfolio details, visit:
+[https://pklavc.github.io/projects.html](https://pklavc.github.io/projects.html)
 
 ---
 
-**CipherGate Security Proxy** - Implementing Zero-Trust Architecture for a more secure digital future.
+*This project demonstrates advanced expertise in Cybersecurity and Zero-Trust architectures.*
