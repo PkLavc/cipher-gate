@@ -11,6 +11,7 @@ import logging
 import json
 from typing import Dict, Any, List, Union, Optional, Pattern
 from enum import Enum
+from functools import lru_cache
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -29,18 +30,20 @@ class MaskingEngine:
     def __init__(self):
         self.patterns = self._compile_patterns()
         self.masking_rules = self._define_masking_rules()
+        self.max_payload_size = 1024 * 1024  # 1MB limit to prevent ReDoS
         
     def _compile_patterns(self) -> Dict[str, Pattern]:
-        """Compile regex patterns for sensitive data detection"""
+        """Compile regex patterns for sensitive data detection with priority ordering"""
         return {
-            'email': re.compile(
-                r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-            ),
+            # High priority patterns (more specific, longer matches) - processed first
             'credit_card': re.compile(
                 r'\b(?:\d[ -]*?){13,16}\b'
             ),
             'ssn': re.compile(
                 r'\b\d{3}[-]?\d{2}[-]?\d{4}\b'
+            ),
+            'email': re.compile(
+                r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
             ),
             'phone': re.compile(
                 r'\b(?:\+?1[-.\s]?)?(?:\(\d{3}\)|\d{3})[-.\s]?\d{3}[-.\s]?\d{4}\b'
@@ -55,10 +58,25 @@ class MaskingEngine:
             'date_of_birth': re.compile(
                 r'\b(?:\d{1,2})[-/](?:\d{1,2})[-/](?:\d{4}|\d{2})\b'
             ),
+            # Lower priority patterns (more general, shorter matches) - processed last
             'account_number': re.compile(
                 r'\b(?:\d[ -]*?){8,17}\b'
             )
         }
+    
+    def _get_pattern_priority(self, pattern_name: str) -> int:
+        """Get priority score for pattern (higher = more priority)"""
+        priorities = {
+            'credit_card': 10,  # Highest priority - most specific
+            'ssn': 9,
+            'email': 8,
+            'phone': 7,
+            'address': 6,
+            'ip_address': 5,
+            'date_of_birth': 4,
+            'account_number': 1   # Lowest priority - most general
+        }
+        return priorities.get(pattern_name, 0)
     
     def _define_masking_rules(self) -> Dict[str, Dict[UserRole, str]]:
         """Define masking rules based on user roles"""
@@ -115,7 +133,7 @@ class MaskingEngine:
     
     def apply_masking(self, data: Union[Dict[str, Any], List[Any], str], role: str) -> Union[Dict[str, Any], List[Any], str]:
         """
-        Apply dynamic data masking based on user role
+        Apply dynamic data masking based on user role with input sanitization
         
         Args:
             data: Data to mask (can be dict, list, or string)
@@ -124,6 +142,12 @@ class MaskingEngine:
         Returns:
             Masked data
         """
+        # Input sanitization and ReDoS protection
+        if isinstance(data, str):
+            if len(data) > self.max_payload_size:
+                logger.warning(f"Input payload too large: {len(data)} bytes, limiting to {self.max_payload_size}")
+                data = data[:self.max_payload_size]
+        
         try:
             user_role = UserRole(role.lower())
         except ValueError:
@@ -144,24 +168,40 @@ class MaskingEngine:
             return data
     
     def _mask_string(self, text: str, role: UserRole) -> str:
-        """Apply masking to a string based on detected patterns"""
+        """Apply masking to a string based on detected patterns with priority ordering"""
         masked_text = text
         
-        for pattern_name, pattern in self.patterns.items():
+        # Masking Precedence: Sort patterns by priority (highest first)
+        # This prevents overlapping matches where shorter patterns
+        # (like account_number) match parts of longer patterns (like credit_card)
+        sorted_patterns = sorted(
+            self.patterns.items(),
+            key=lambda x: self._get_pattern_priority(x[0]),
+            reverse=True  # Sort by priority descending
+        )
+        
+        for pattern_name, pattern in sorted_patterns:
             if pattern_name in self.masking_rules:
                 rule = self.masking_rules[pattern_name].get(role, 'masked')
-                masked_text = self._apply_pattern_masking(masked_text, pattern, rule)
+                masked_text = self._apply_pattern_masking(masked_text, pattern_name, rule, role)
         
         return masked_text
     
-    def _apply_pattern_masking(self, text: str, pattern: Pattern, rule: str) -> str:
-        """Apply specific masking rule to detected patterns"""
+    @lru_cache(maxsize=1000)
+    def _apply_pattern_masking(self, text: str, pattern_name: str, rule: str, role: UserRole) -> str:
+        """Apply specific masking rule to detected patterns with greedy masking prevention"""
+        # Get the compiled pattern
+        pattern = self.patterns[pattern_name]
+        
         def mask_match(match: re.Match) -> str:
             matched_text = match.group(0)
             
             if rule == 'full':
                 return matched_text
             elif rule == 'masked':
+                # Special handling for guest emails
+                if pattern_name == 'email' and role == UserRole.GUEST:
+                    return self._mask_guest_email(matched_text)
                 return '*' * len(matched_text)
             elif rule == 'partial':
                 return self._mask_partially(matched_text)
@@ -172,18 +212,73 @@ class MaskingEngine:
             else:
                 return '*' * len(matched_text)
         
-        return pattern.sub(mask_match, text)
+        # Greedy Masking: Process matches from left to right, skipping already masked regions
+        # This ensures that once a region is masked by a high-priority pattern,
+        # it won't be processed by lower-priority patterns
+        
+        # Find all matches and their positions
+        matches = list(pattern.finditer(text))
+        if not matches:
+            return text
+        
+        # Build result string with greedy masking prevention
+        result = []
+        last_end = 0
+        
+        for match in matches:
+            start, end = match.span()
+            
+            # Skip this match if it overlaps with already processed regions
+            if start < last_end:
+                continue
+            
+            # Add text before this match (if not already processed)
+            if start > last_end:
+                result.append(text[last_end:start])
+            
+            # Apply masking to this match
+            masked_text = mask_match(match)
+            result.append(masked_text)
+            
+            # Update last_end to mark this region as processed
+            last_end = end
+        
+        # Add remaining text after last match
+        if last_end < len(text):
+            result.append(text[last_end:])
+        
+        return ''.join(result)
     
     def _mask_partially(self, text: str) -> str:
         """Mask part of the text while preserving some characters"""
         if len(text) <= 2:
             return '*' * len(text)
         
-        # Show first and last character, mask the rest
-        return text[0] + '*' * (len(text) - 2) + text[-1]
+        # For emails, preserve domain part
+        if '@' in text:
+            local_part, domain = text.split('@', 1)
+            if len(local_part) <= 2:
+                return '*' * len(local_part) + '@' + domain
+            else:
+                # Show first character of local part and full domain
+                return local_part[0] + '*' * (len(local_part) - 1) + '@' + domain
+        else:
+            # For other text, show first and last character
+            return text[0] + '*' * (len(text) - 2) + text[-1]
+    
+    def _mask_guest_email(self, text: str) -> str:
+        """Mask email for guest role - ***@***.com format"""
+        if '@' in text:
+            local_part, domain = text.split('@', 1)
+            if '.' in domain:
+                domain_part, tld = domain.split('.', 1)
+                return '***@***.' + tld
+            else:
+                return '***@***.com'
+        return '***@***.com'
     
     def _mask_to_last_four(self, text: str) -> str:
-        """Mask all but the last four characters"""
+        """Mask all but the last four characters while preserving format"""
         if len(text) <= 4:
             return '*' * len(text)
         
@@ -192,7 +287,7 @@ class MaskingEngine:
         if len(digits) <= 4:
             return '*' * len(text)
         
-        # Replace all digits except last 4 with *
+        # Preserve formatting (dashes, spaces) while masking
         result = ''
         digit_count = 0
         for char in reversed(text):
@@ -203,6 +298,7 @@ class MaskingEngine:
                     result = '*' + result
                 digit_count += 1
             else:
+                # Preserve non-digit characters (dashes, spaces)
                 result = char + result
         
         return result

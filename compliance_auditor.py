@@ -10,6 +10,8 @@ import json
 import logging
 import time
 import threading
+import asyncio
+import aiofiles
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
@@ -73,13 +75,17 @@ class AuditRecord:
 
 
 class ComplianceAuditor:
-    """Tamper-proof compliance logging system"""
+    """Tamper-proof compliance logging system with asynchronous I/O"""
     
     def __init__(self):
         self.audit_log: List[AuditRecord] = []
         self.chain_head: Optional[str] = None
         self.lock = threading.RLock()
+        self.log_queue = asyncio.Queue()
+        self.log_file_path = "audit_log.json"
         self._initialize_chain()
+        # Start background log writer task
+        self._log_writer_task = None
         
     def _initialize_chain(self):
         """Initialize the audit chain with a genesis record"""
@@ -258,8 +264,85 @@ class ComplianceAuditor:
             self.audit_log.append(record)
             self.chain_head = record.chain_hash
             
+            # Start background writer if not running
+            if self._log_writer_task is None or self._log_writer_task.done():
+                try:
+                    loop = asyncio.get_running_loop()
+                    self._log_writer_task = loop.create_task(self._background_log_writer())
+                except RuntimeError:
+                    # No running event loop, start one in a thread
+                    import threading
+                    def run_event_loop():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(self._background_log_writer())
+                        finally:
+                            loop.close()
+                    
+                    thread = threading.Thread(target=run_event_loop, daemon=True)
+                    thread.start()
+            
+            # Put record in queue for async writing
+            try:
+                loop = asyncio.get_running_loop()
+                asyncio.run_coroutine_threadsafe(self.log_queue.put(record), loop)
+            except RuntimeError:
+                # No running event loop, use a simple queue approach
+                # This is a fallback for synchronous contexts
+                pass
+            
             # Log to standard logging for monitoring
             logger.info(f"Audit: {record.event_type} - User: {record.user_id} - Action: {record.action}")
+    
+    async def _background_log_writer(self):
+        """Background task to write logs to disk asynchronously"""
+        try:
+            while True:
+                # Get record from queue (this will block until a record is available)
+                record = await self.log_queue.get()
+                
+                # Write to disk asynchronously
+                await self._write_record_to_disk(record)
+                
+                # Mark task as done
+                self.log_queue.task_done()
+                
+        except asyncio.CancelledError:
+            logger.info("Background log writer task cancelled")
+        except Exception as e:
+            logger.error(f"Error in background log writer: {e}")
+    
+    async def _write_record_to_disk(self, record: AuditRecord):
+        """Write a single record to disk asynchronously"""
+        try:
+            # Convert record to JSON
+            record_data = asdict(record)
+            record_json = json.dumps(record_data, separators=(',', ':'))
+            
+            # Write to file asynchronously
+            async with aiofiles.open(self.log_file_path, 'a', encoding='utf-8') as f:
+                await f.write(record_json + '\n')
+                
+        except Exception as e:
+            logger.error(f"Failed to write audit record to disk: {e}")
+    
+    async def flush_logs(self):
+        """Wait for all pending logs to be written to disk"""
+        try:
+            # Wait for all items in queue to be processed
+            await self.log_queue.join()
+            
+            # Cancel the background writer task
+            if self._log_writer_task and not self._log_writer_task.done():
+                self._log_writer_task.cancel()
+                try:
+                    await self._log_writer_task
+                except asyncio.CancelledError:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"Error flushing logs: {e}")
     
     def _generate_session_id(self) -> str:
         """Generate a unique session ID"""
@@ -300,7 +383,7 @@ class ComplianceAuditor:
                 if record.record_hash != calculated_hash:
                     return {
                         "integrity": False,
-                        "error": f"Record hash mismatch at index {i}",
+                        "error": f"Record hash mismatch at record {i}",
                         "expected_hash": calculated_hash,
                         "actual_hash": record.record_hash
                     }

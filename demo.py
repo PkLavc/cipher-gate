@@ -274,11 +274,11 @@ def demo_end_to_end():
     
     print("\n=== DEMO COMPLETE ===")
     print("CipherGate successfully demonstrated:")
-    print("✓ Zero-Trust authentication and authorization")
-    print("✓ Dynamic data masking based on user roles")
-    print("✓ Cryptographic protection with AES-256-GCM")
-    print("✓ Tamper-proof compliance logging")
-    print("✓ End-to-end security flow")
+    print("OK Zero-Trust authentication and authorization")
+    print("OK Dynamic data masking based on user roles")
+    print("OK Cryptographic protection with AES-256-GCM")
+    print("OK Tamper-proof compliance logging")
+    print("OK End-to-end security flow")
 
 
 if __name__ == "__main__":

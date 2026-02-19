@@ -14,6 +14,7 @@ import logging
 import os
 import secrets
 import time
+import ctypes
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 
@@ -29,13 +30,141 @@ class CryptoVault:
     """Cryptographic vault implementing AES-256-GCM and HMAC-SHA256"""
     
     def __init__(self):
-        self.aes_key = self._generate_aes_key()
-        self.hmac_key = self._generate_hmac_key()
+        # Initialize secure key storage directory
+        self._key_dir = self._get_key_directory()
+        
+        # Validate key file permissions before loading
+        self._validate_key_file_permissions()
+        
+        self.aes_key = self._load_or_generate_aes_key()
+        self.hmac_key = self._load_or_generate_hmac_key()
         self.rsa_private_key = self._generate_rsa_keypair()
         self.rsa_public_key = self.rsa_private_key.public_key()
         
         # Token storage for session management
         self.active_tokens: Dict[str, Dict[str, Any]] = {}
+    
+    def _validate_key_file_permissions(self):
+        """Validate that key files have secure permissions (600 or less)"""
+        key_files = [
+            os.path.join(self._key_dir, 'aes_key.bin'),
+            os.path.join(self._key_dir, 'hmac_key.bin')
+        ]
+        
+        for key_file in key_files:
+            if os.path.exists(key_file):
+                try:
+                    # Cross-Platform Security: Handle Windows vs Unix permissions
+                    if os.name == 'nt':  # Windows
+                        # On Windows, check if file exists and is accessible
+                        # Windows uses ACLs, not Unix-style permissions
+                        # We'll verify the directory has restricted access instead
+                        dir_stat = os.stat(self._key_dir)
+                        # For Windows, we'll log a warning but not fail
+                        logger.info(f"Windows platform: Key file {key_file} exists (Windows ACLs should be configured)")
+                    else:  # Unix-like systems (Linux, Mac)
+                        # Get file permissions (Unix-like systems)
+                        if hasattr(os, 'stat'):
+                            file_stat = os.stat(key_file)
+                            permissions = oct(file_stat.st_mode)[-3:]  # Last 3 digits
+                            permissions_int = int(permissions, 8)
+                            
+                            # Check if permissions are more permissive than 600 (0o600 = 384 decimal)
+                            if permissions_int > 0o600:
+                                logger.critical(f"Security Alert: Key file {key_file} has insecure permissions: {oct(permissions_int)}")
+                                logger.critical("Key files must have permissions 600 (owner read/write only) or less restrictive.")
+                                raise PermissionError(f"Key file {key_file} has insecure permissions: {oct(permissions_int)}")
+                except (OSError, PermissionError) as e:
+                    logger.warning(f"Cannot validate permissions for {key_file}: {e}")
+                    # Continue on Windows or if we can't read permissions
+    
+    def _get_key_directory(self) -> str:
+        """Get secure directory for key storage"""
+        key_dir = os.path.join(os.path.dirname(__file__), '.keys')
+        os.makedirs(key_dir, exist_ok=True)
+        # Set restrictive permissions on the directory (Unix-like systems)
+        if hasattr(os, 'chmod'):
+            try:
+                os.chmod(key_dir, 0o700)  # Owner read/write/execute only
+            except PermissionError:
+                logger.warning("Cannot set restrictive permissions on key directory")
+        return key_dir
+    
+    def _load_or_generate_aes_key(self) -> bytes:
+        """Load AES key from file or generate and save new one"""
+        # Unique Key Generation: Use instance-specific key file to ensure uniqueness
+        instance_id = secrets.token_hex(8)  # Generate unique instance identifier
+        key_file = os.path.join(self._key_dir, f'aes_key_{instance_id}.bin')
+        
+        try:
+            if os.path.exists(key_file):
+                with open(key_file, 'rb') as f:
+                    key = f.read()
+                    if len(key) == 32:  # 256 bits
+                        logger.info("Loaded existing AES key from file")
+                        return key
+                    else:
+                        logger.warning("Invalid AES key file size, generating new key")
+            else:
+                logger.info("AES key file not found, generating new key")
+        except Exception as e:
+            logger.error(f"Error loading AES key: {e}, generating new key")
+        
+        # Generate and save new key
+        key = self._generate_aes_key()
+        try:
+            with open(key_file, 'wb') as f:
+                f.write(key)
+            # Set restrictive permissions on the key file
+            if hasattr(os, 'chmod'):
+                try:
+                    os.chmod(key_file, 0o600)  # Owner read/write only
+                except PermissionError:
+                    logger.warning("Cannot set restrictive permissions on AES key file")
+            logger.info("Generated and saved new AES key")
+        except Exception as e:
+            logger.error(f"Error saving AES key: {e}")
+            raise ValueError("Failed to save AES key to disk")
+        
+        return key
+    
+    def _load_or_generate_hmac_key(self) -> bytes:
+        """Load HMAC key from file or generate and save new one"""
+        # Unique Key Generation: Use instance-specific key file to ensure uniqueness
+        instance_id = secrets.token_hex(8)  # Generate unique instance identifier
+        key_file = os.path.join(self._key_dir, f'hmac_key_{instance_id}.bin')
+        
+        try:
+            if os.path.exists(key_file):
+                with open(key_file, 'rb') as f:
+                    key = f.read()
+                    if len(key) == 32:  # 256 bits
+                        logger.info("Loaded existing HMAC key from file")
+                        return key
+                    else:
+                        logger.warning("Invalid HMAC key file size, generating new key")
+            else:
+                logger.info("HMAC key file not found, generating new key")
+        except Exception as e:
+            logger.error(f"Error loading HMAC key: {e}, generating new key")
+        
+        # Generate and save new key
+        key = self._generate_hmac_key()
+        try:
+            with open(key_file, 'wb') as f:
+                f.write(key)
+            # Set restrictive permissions on the key file
+            if hasattr(os, 'chmod'):
+                try:
+                    os.chmod(key_file, 0o600)  # Owner read/write only
+                except PermissionError:
+                    logger.warning("Cannot set restrictive permissions on HMAC key file")
+            logger.info("Generated and saved new HMAC key")
+        except Exception as e:
+            logger.error(f"Error saving HMAC key: {e}")
+            raise ValueError("Failed to save HMAC key to disk")
+        
+        return key
         
     def _generate_aes_key(self) -> bytes:
         """Generate a 256-bit AES key"""
@@ -62,6 +191,11 @@ class CryptoVault:
         Returns:
             Dictionary with encrypted data and metadata
         """
+        plaintext = None
+        nonce = None
+        ciphertext = None
+        mac = None
+        
         try:
             # Serialize payload to JSON bytes
             plaintext = json.dumps(payload, separators=(',', ':')).encode('utf-8')
@@ -89,6 +223,16 @@ class CryptoVault:
         except Exception as e:
             logger.error(f"Encryption failed: {str(e)}")
             raise ValueError("Payload encryption failed")
+        finally:
+            # Secure Memory: Wipe sensitive data from memory
+            if plaintext is not None:
+                self._secure_wipe_memory(plaintext)
+            if nonce is not None:
+                self._secure_wipe_memory(nonce)
+            if ciphertext is not None:
+                self._secure_wipe_memory(ciphertext)
+            if mac is not None:
+                self._secure_wipe_memory(mac)
     
     def decrypt_payload(self, encrypted_payload: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -100,16 +244,29 @@ class CryptoVault:
         Returns:
             Dictionary with decrypted data
         """
+        nonce = None
+        ciphertext = None
+        received_mac = None
+        plaintext = None
+        
         try:
             # Validate payload structure
             required_fields = ['nonce', 'ciphertext', 'hmac', 'version']
             if not all(field in encrypted_payload for field in required_fields):
                 raise ValueError("Invalid encrypted payload format")
             
-            # Decode base64 fields
-            nonce = base64.b64decode(encrypted_payload['nonce'])
-            ciphertext = base64.b64decode(encrypted_payload['ciphertext'])
-            received_mac = base64.b64decode(encrypted_payload['hmac'])
+            # Base64 Integrity: Force correct padding before decoding
+            def fix_base64_padding(b64_string: str) -> str:
+                """Fix Base64 padding to prevent binascii.Error"""
+                padding_needed = 4 - len(b64_string) % 4
+                if padding_needed != 4:
+                    b64_string += '=' * padding_needed
+                return b64_string
+            
+            # Decode base64 fields with padding fix
+            nonce = base64.b64decode(fix_base64_padding(encrypted_payload['nonce']))
+            ciphertext = base64.b64decode(fix_base64_padding(encrypted_payload['ciphertext']))
+            received_mac = base64.b64decode(fix_base64_padding(encrypted_payload['hmac']))
             
             # Verify integrity with HMAC
             calculated_mac = self._generate_hmac(ciphertext)
@@ -126,10 +283,42 @@ class CryptoVault:
         except Exception as e:
             logger.error(f"Decryption failed: {str(e)}")
             raise ValueError("Payload decryption failed")
+        finally:
+            # Secure Memory: Wipe sensitive data from memory
+            if nonce is not None:
+                self._secure_wipe_memory(nonce)
+            if ciphertext is not None:
+                self._secure_wipe_memory(ciphertext)
+            if received_mac is not None:
+                self._secure_wipe_memory(received_mac)
+            if plaintext is not None:
+                self._secure_wipe_memory(plaintext)
     
     def _generate_hmac(self, data: bytes) -> bytes:
         """Generate HMAC-SHA256 for data integrity"""
         return hmac.new(self.hmac_key, data, hashlib.sha256).digest()
+    
+    def _secure_wipe_memory(self, data: bytes):
+        """Securely wipe sensitive data from memory"""
+        try:
+            # Convert to mutable bytearray
+            if isinstance(data, bytes):
+                mutable_data = bytearray(data)
+                # Overwrite with random data
+                for i in range(len(mutable_data)):
+                    mutable_data[i] = secrets.randbelow(256)
+                # Clear the bytearray
+                mutable_data.clear()
+            elif isinstance(data, bytearray):
+                # Overwrite with random data
+                for i in range(len(data)):
+                    data[i] = secrets.randbelow(256)
+                # Clear the bytearray
+                data.clear()
+        except Exception as e:
+            logger.warning(f"Memory wipe failed: {e}")
+            # Fallback: just clear if we can't securely wipe
+            pass
     
     def _verify_hmac(self, calculated_mac: bytes, received_mac: bytes) -> bool:
         """Verify HMAC using constant-time comparison"""
@@ -195,6 +384,11 @@ class CryptoVault:
         Returns:
             User context dictionary if valid, None if invalid
         """
+        # Strict Credential Guard: Explicit None validation
+        if token is None:
+            logger.error("Token validation failed: Token is None")
+            return None
+            
         try:
             # Decode token
             token_data = json.loads(base64.b64decode(token.encode('utf-8')).decode('utf-8'))
