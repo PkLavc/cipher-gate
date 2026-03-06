@@ -77,7 +77,20 @@ class AuditRecord:
 class ComplianceAuditor:
     """Tamper-proof compliance logging system with asynchronous I/O"""
     
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+    
     def __init__(self):
+        if hasattr(self, 'initialized'):
+            return
+        
         self.audit_log: List[AuditRecord] = []
         self.chain_head: Optional[str] = None
         self.lock = threading.RLock()
@@ -86,6 +99,7 @@ class ComplianceAuditor:
         self._initialize_chain()
         # Start background log writer task
         self._log_writer_task = None
+        self.initialized = True
         
     def _initialize_chain(self):
         """Initialize the audit chain with a genesis record"""
@@ -252,7 +266,6 @@ class ComplianceAuditor:
     def _add_record(self, record: AuditRecord) -> None:
         """Add a record to the audit log with chain integrity"""
         with self.lock:
-            # Chain the record to the previous one
             if self.audit_log:
                 previous_record = self.audit_log[-1]
                 record.chain_hash = hashlib.sha256(
@@ -264,35 +277,34 @@ class ComplianceAuditor:
             self.audit_log.append(record)
             self.chain_head = record.chain_hash
             
-            # Start background writer if not running
             if self._log_writer_task is None or self._log_writer_task.done():
                 try:
                     loop = asyncio.get_running_loop()
                     self._log_writer_task = loop.create_task(self._background_log_writer())
                 except RuntimeError:
-                    # No running event loop, start one in a thread
-                    import threading
-                    def run_event_loop():
+                    def create_event_loop():
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
                         try:
-                            loop.run_until_complete(self._background_log_writer())
+                            task = loop.create_task(self._background_log_writer())
+                            loop.run_until_complete(task)
+                        except asyncio.CancelledError:
+                            pass
                         finally:
                             loop.close()
                     
-                    thread = threading.Thread(target=run_event_loop, daemon=True)
+                    thread = threading.Thread(target=create_event_loop, daemon=True)
                     thread.start()
             
-            # Put record in queue for async writing
             try:
                 loop = asyncio.get_running_loop()
                 asyncio.run_coroutine_threadsafe(self.log_queue.put(record), loop)
             except RuntimeError:
-                # No running event loop, use a simple queue approach
-                # This is a fallback for synchronous contexts
-                pass
+                try:
+                    asyncio.run(self._write_record_to_disk(record))
+                except Exception as e:
+                    logger.error(f"Failed to write audit record synchronously: {e}")
             
-            # Log to standard logging for monitoring
             logger.info(f"Audit: {record.event_type} - User: {record.user_id} - Action: {record.action}")
     
     async def _background_log_writer(self):

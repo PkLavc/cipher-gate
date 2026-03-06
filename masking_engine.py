@@ -190,16 +190,17 @@ class MaskingEngine:
     @lru_cache(maxsize=1000)
     def _apply_pattern_masking(self, text: str, pattern_name: str, rule: str, role: UserRole) -> str:
         """Apply specific masking rule to detected patterns with greedy masking prevention"""
-        # Get the compiled pattern
         pattern = self.patterns[pattern_name]
         
         def mask_match(match: re.Match) -> str:
             matched_text = match.group(0)
             
+            if pattern_name == 'credit_card' and not self._validate_credit_card(matched_text):
+                return matched_text
+            
             if rule == 'full':
                 return matched_text
             elif rule == 'masked':
-                # Special handling for guest emails
                 if pattern_name == 'email' and role == UserRole.GUEST:
                     return self._mask_guest_email(matched_text)
                 return '*' * len(matched_text)
@@ -212,38 +213,27 @@ class MaskingEngine:
             else:
                 return '*' * len(matched_text)
         
-        # Greedy Masking: Process matches from left to right, skipping already masked regions
-        # This ensures that once a region is masked by a high-priority pattern,
-        # it won't be processed by lower-priority patterns
-        
-        # Find all matches and their positions
         matches = list(pattern.finditer(text))
         if not matches:
             return text
         
-        # Build result string with greedy masking prevention
         result = []
         last_end = 0
         
         for match in matches:
             start, end = match.span()
             
-            # Skip this match if it overlaps with already processed regions
             if start < last_end:
                 continue
             
-            # Add text before this match (if not already processed)
             if start > last_end:
                 result.append(text[last_end:start])
             
-            # Apply masking to this match
             masked_text = mask_match(match)
             result.append(masked_text)
             
-            # Update last_end to mark this region as processed
             last_end = end
         
-        # Add remaining text after last match
         if last_end < len(text):
             result.append(text[last_end:])
         
@@ -302,6 +292,29 @@ class MaskingEngine:
                 result = char + result
         
         return result
+    
+    def _validate_credit_card(self, card_number: str) -> bool:
+        """Validate credit card number using Luhn algorithm"""
+        # Clean the card number (remove spaces and dashes)
+        digits = re.sub(r'[^\d]', '', card_number)
+        
+        # Check length (valid credit cards are 13-16 digits)
+        if len(digits) < 13 or len(digits) > 16:
+            return False
+        
+        # Luhn algorithm
+        total = 0
+        reverse_digits = digits[::-1]
+        
+        for i, digit in enumerate(reverse_digits):
+            n = int(digit)
+            if i % 2 == 1:  # Every second digit from right
+                n *= 2
+                if n > 9:
+                    n = n // 10 + n % 10
+            total += n
+        
+        return total % 10 == 0
     
     def _mask_year_only(self, text: str) -> str:
         """Mask only the year portion of dates"""

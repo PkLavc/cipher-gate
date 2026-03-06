@@ -91,40 +91,39 @@ class CryptoVault:
         return key_dir
     
     def _load_or_generate_aes_key(self) -> bytes:
-        """Load AES key from file or generate and save new one"""
-        # Unique Key Generation: Use instance-specific key file to ensure uniqueness
-        instance_id = secrets.token_hex(8)  # Generate unique instance identifier
-        key_file = os.path.join(self._key_dir, f'aes_key_{instance_id}.bin')
+        """Load AES key from persistent vault or generate and save new one"""
+        vault_file = os.path.join(self._key_dir, '.vault.key')
+        master_key = self._get_master_key()
         
         try:
-            if os.path.exists(key_file):
-                with open(key_file, 'rb') as f:
-                    key = f.read()
-                    if len(key) == 32:  # 256 bits
-                        logger.info("Loaded existing AES key from file")
-                        return key
+            if os.path.exists(vault_file):
+                with open(vault_file, 'rb') as f:
+                    encrypted_data = f.read()
+                    aes_key = self._decrypt_vault(encrypted_data, master_key)
+                    if len(aes_key) == 32:  # 256 bits
+                        logger.info("Loaded existing AES key from persistent vault")
+                        return aes_key
                     else:
-                        logger.warning("Invalid AES key file size, generating new key")
+                        logger.warning("Invalid AES key in vault, generating new key")
             else:
-                logger.info("AES key file not found, generating new key")
+                logger.info("Vault file not found, generating new keys")
         except Exception as e:
-            logger.error(f"Error loading AES key: {e}, generating new key")
+            logger.error(f"Error loading AES key from vault: {e}, generating new key")
         
-        # Generate and save new key
         key = self._generate_aes_key()
+        encrypted_vault = self._encrypt_vault(key, master_key)
         try:
-            with open(key_file, 'wb') as f:
-                f.write(key)
-            # Set restrictive permissions on the key file
+            with open(vault_file, 'wb') as f:
+                f.write(encrypted_vault)
             if hasattr(os, 'chmod'):
                 try:
-                    os.chmod(key_file, 0o600)  # Owner read/write only
+                    os.chmod(vault_file, 0o600)  # Owner read/write only
                 except PermissionError:
-                    logger.warning("Cannot set restrictive permissions on AES key file")
-            logger.info("Generated and saved new AES key")
+                    logger.warning("Cannot set restrictive permissions on vault file")
+            logger.info("Generated and saved new AES key to persistent vault")
         except Exception as e:
-            logger.error(f"Error saving AES key: {e}")
-            raise ValueError("Failed to save AES key to disk")
+            logger.error(f"Error saving AES key to vault: {e}")
+            raise ValueError("Failed to save AES key to persistent vault")
         
         return key
     
@@ -169,6 +168,35 @@ class CryptoVault:
     def _generate_aes_key(self) -> bytes:
         """Generate a 256-bit AES key"""
         return secrets.token_bytes(32)  # 256 bits
+    
+    def _get_master_key(self) -> bytes:
+        """Get master key from environment variable for vault encryption"""
+        master_key_env = os.environ.get('CIPHERGATE_MASTER_KEY')
+        if not master_key_env:
+            # Generate a random master key and warn
+            logger.warning("CIPHERGATE_MASTER_KEY environment variable not set, generating random master key")
+            master_key_env = secrets.token_hex(32)
+            os.environ['CIPHERGATE_MASTER_KEY'] = master_key_env
+        
+        # Derive a 256-bit key from the environment variable
+        return hashlib.sha256(master_key_env.encode('utf-8')).digest()
+    
+    def _encrypt_vault(self, key: bytes, master_key: bytes) -> bytes:
+        """Encrypt the vault using AES-256-GCM"""
+        nonce = secrets.token_bytes(12)
+        aesgcm = AESGCM(master_key)
+        ciphertext = aesgcm.encrypt(nonce, key, None)
+        return nonce + ciphertext
+    
+    def _decrypt_vault(self, encrypted_data: bytes, master_key: bytes) -> bytes:
+        """Decrypt the vault using AES-256-GCM"""
+        if len(encrypted_data) < 12:
+            raise ValueError("Invalid encrypted vault data")
+        
+        nonce = encrypted_data[:12]
+        ciphertext = encrypted_data[12:]
+        aesgcm = AESGCM(master_key)
+        return aesgcm.decrypt(nonce, ciphertext, None)
     
     def _generate_hmac_key(self) -> bytes:
         """Generate a 256-bit HMAC key"""
