@@ -1,54 +1,19 @@
-# CipherGate
+# CipherGate Security Proxy
 
 [![Python Version](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![Security](https://img.shields.io/badge/Security-Zero--Trust-red.svg)](https://github.com/PkLavc/cipher-gate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Executive Summary
+## Overview
 
-CipherGate Security Proxy implements industry-standard Zero-Trust Architecture (ZTA) for protecting sensitive data (PII/PHI) in transit. This high-performance security solution addresses critical vulnerabilities in modern digital infrastructure by implementing comprehensive data protection, authentication, and monitoring capabilities.
+CipherGate Security Proxy is an enterprise-grade Zero-Trust security solution designed to protect sensitive data in transit. This production-ready implementation provides comprehensive data protection, authentication, and monitoring capabilities for modern digital infrastructure.
 
-### The Problem
+### Core Security Principles
 
-- **Data Breach Risk**: Organizations face increasing threats from both external attackers and insider threats
-- **Regulatory Compliance**: GDPR, HIPAA, and other regulations impose strict requirements for data protection
-- **Supply Chain Vulnerabilities**: Third-party integrations and microservices increase attack surface
-- **Legacy Security Models**: Traditional perimeter-based security fails against modern attack vectors
-
-### The Solution
-
-CipherGate implements industry-standard Zero-Trust principles to provide:
-
-- **Verify Explicitly**: Every request is authenticated, authorized, and encrypted
-- **Least Privilege Access**: Data is masked based on user roles and context
-- **Assume Breach**: Continuous monitoring and tamper-proof logging for incident response
-- **Cryptographic Protection**: AES-256-GCM encryption with HMAC-SHA256 integrity verification
-
-## Zero-Trust Implementation
-
-### Core Principles Applied
-
-#### 1. Verify Explicitly
-- **Multi-Factor Authentication**: Token-based authentication with RSA digital signatures
-- **Continuous Validation**: Every request undergoes cryptographic verification
-- **Session Management**: Automatic token expiration and revocation capabilities
-
-#### 2. Least Privilege Access
-- **Role-Based Data Masking**: Automatic detection and masking of sensitive data patterns
-- **Context-Aware Access**: Different masking levels based on user roles (Admin, User, Guest, Auditor)
-- **Pattern Recognition**: Automatic detection of PII/PHI including:
-  - Email addresses
-  - Credit card numbers
-  - Social Security Numbers (SSN)
-  - Phone numbers
-  - Physical addresses
-  - IP addresses
-  - Account numbers
-
-#### 3. Assume Breach
-- **Tamper-Proof Logging**: Cryptographic chain-of-custody for all access attempts
-- **Real-Time Monitoring**: Continuous security event logging and violation detection
-- **Incident Response**: Detailed audit trails for forensic analysis
+- **Verify Explicitly**: Every request undergoes cryptographic authentication and authorization
+- **Least Privilege Access**: Role-based data masking and access control
+- **Assume Breach**: Continuous monitoring with tamper-proof audit trails
+- **Cryptographic Protection**: Military-grade encryption with integrity verification
 
 ## Technical Architecture
 
@@ -92,61 +57,130 @@ graph LR
 - **Real-time security violation detection**
 - **Immutable audit trail with integrity verification**
 
-### Security Standards Compliance
+## Security Specifications
 
-#### Cryptographic Standards
-- **AES-256-GCM**: Industry-standard encryption algorithm
-- **HMAC-SHA256**: Cryptographic integrity verification
-- **RSA-2048**: Digital signature and token validation
-- **Secure Random Generation**: Cryptographically secure key generation
+### Cryptographic Standards
 
-#### Data Protection Standards
-- **GDPR Compliance**: Data minimization, purpose limitation, and audit requirements
-- **HIPAA Compliance**: Protected Health Information (PHI) protection standards
-- **NIST Zero-Trust Framework**: Implementation of NIST SP 800-207 guidelines
+- **AES-256-GCM**: Industry-standard encryption algorithm with authenticated encryption
+- **HMAC-SHA256**: Cryptographic integrity verification using SHA-256
+- **RSA-2048**: Digital signature and token validation with 2048-bit keys
+- **Secure Random Generation**: Cryptographically secure key generation using `secrets` module
+- **Luhn Algorithm**: PCI-DSS compliant credit card validation
+- **ReDoS Mitigation**: Regular expression denial of service protection with input size limits
+
+### Data Protection Standards
+
+- **GDPR Compliance**: Data minimization, purpose limitation, and comprehensive audit requirements
+- **HIPAA Compliance**: Protected Health Information (PHI) protection with technical safeguards
+- **PCI-DSS Compliance**: Payment card industry data security standards implementation
+- **NIST Zero-Trust Framework**: Full implementation of NIST SP 800-207 guidelines
+
+### Key Management Architecture
+
+#### Master Key Derivation
+- Environment-based key generation with secure fallback mechanisms
+- SHA-256 based key derivation for enhanced security
+- Key isolation with separate keys for different cryptographic operations
+
+#### Persistent Key Storage
+- AES-256 encrypted storage for cryptographic keys
+- File system permissions validation across platforms
+- Cross-platform security measures for Windows and Unix-like systems
+
+#### Key Lifecycle Management
+- Cryptographically secure random key generation
+- Comprehensive key integrity and format validation
+- Runtime file system permission verification
+- Secure memory handling with automatic wiping
+
+## High-Concurrency Auditing
+
+CipherGate's compliance auditing system is designed for enterprise-scale, high-throughput environments:
+
+### Singleton Async Logger
+- Thread-safe singleton pattern ensuring single instance across all threads and processes
+- Intelligent event loop detection and reuse in FastAPI environments
+- Background processing with asynchronous log writing to prevent blocking
+- Queue-based architecture for non-blocking log processing
+
+### Tamper-Proof Audit Trails
+- Cryptographic chaining with each audit record linked to previous entries
+- Immutable logging with write-once audit trail and integrity verification
+- Real-time processing with sub-millisecond audit log processing
+- Scalable storage with asynchronous file I/O for high-volume operations
+
+### High-Throughput Performance
+- Non-blocking I/O operations preventing critical application path blocking
+- Optimized memory usage for large-scale deployments
+- Seamless integration with FastAPI's event loop architecture
+- Synchronous fallback for environments without running event loops
+
+## Resilience Features
+
+Comprehensive resilience mechanisms designed for production environments:
+
+### Graceful Degradation
+- Component failure handling with system continuity during individual component failures
+- Automatic fallback to secure defaults when advanced features are unavailable
+- Error isolation preventing component failures from cascading
+- Service continuity ensuring core security functions remain operational
+
+### File System Security
+- Runtime validation of file system permissions for security-critical files
+- Cross-platform support with platform-specific security measures
+- Restrictive file permissions (600) for cryptographic key files
+- Continuous monitoring of file system security posture
+
+### Operational Resilience
+- Restart persistence with cryptographic keys and configuration preservation
+- Automatic state recovery after system failures
+- Comprehensive health checks for all critical components
+- Performance degradation handling while maintaining security
+
+### Security Monitoring
+- Real-time alerts for security violations and anomalies
+- Continuous audit trail integrity verification
+- Security operation performance monitoring
+- Automated compliance report generation for regulatory requirements
+
+## Compliance and Auditing
 
 ### Regulatory Alignment
+
 | Regulation | Requirement | CipherGate Implementation |
 | :--- | :--- | :--- |
 | **GDPR** | Right to Privacy | Dynamic Data Masking (PII) |
 | **HIPAA** | Technical Safeguards | AES-256 Encryption & Audit Trails |
+| **PCI-DSS** | Payment Card Security | Luhn Algorithm & Card Masking |
 | **NIST 800-207** | Zero-Trust Architecture | Continuous Verification Middleware |
 
-## National Interest Justification
+### Audit Log Example
+```json
+{
+  "event": "pii_masking_applied",
+  "source_ip": "192.168.1.50",
+  "endpoint": "/v1/user/data",
+  "masked_fields": ["email", "credit_card"],
+  "algorithm": "AES-256-GCM",
+  "status": "success"
+}
+```
 
-### Digital Supply Chain Protection
+### Audit Trail Features
 
-CipherGate addresses critical vulnerabilities in the digital supply chain by:
+- Cryptographic chaining with each log entry cryptographically linked to previous
+- Tamper detection with automatic detection of log modification attempts
+- Real-time monitoring with live security event streaming
+- Compliance reports with automated GDPR/HIPAA compliance reporting
 
-1. **Third-Party Integration Security**: Securing data flows between systems and external services
-2. **Microservices Protection**: Implementing Zero-Trust between service communications
-3. **API Security**: Protecting sensitive data in API communications
-4. **Data Sovereignty**: Ensuring data protection regardless of processing location
+### Security Monitoring
 
-### Critical Infrastructure Protection
+- Access pattern analysis for detection of unusual access patterns
+- Security violation logging with automatic policy violation logging
+- Performance monitoring with request latency and throughput metrics
+- Error tracking with detailed error logging for troubleshooting
 
-The implementation supports protection of critical infrastructure by:
-
-- **Healthcare Systems**: HIPAA-compliant protection of patient data
-- **Financial Services**: PCI-DSS compatible data protection
-- **Government Systems**: FISMA and FedRAMP compatible security controls
-- **Educational Institutions**: FERPA-compliant student data protection
-
-### Economic Impact
-
-- **Breach Cost Reduction**: Average data breach cost of $4.45 million (IBM 2023)
-- **Compliance Cost Reduction**: Automated compliance reporting and audit trails
-- **Operational Efficiency**: Reduced manual security processes and incident response time
-- **Innovation Enablement**: Secure platform for digital transformation initiatives
-
-### Security Standards Impact
-| Feature | Implementation | Benefit |
-| :--- | :--- | :--- |
-| **Data Masking** | Regex-based PII identification | Compliance with GDPR/LGPD |
-| **Encryption** | AES-256-GCM | Military-grade data protection |
-| **Zero-Trust** | JWT-based auth verification | Prevents unauthorized lateral movement |
-
-## Installation and Usage
+## Setup & Usage
 
 ### Prerequisites
 
@@ -192,31 +226,23 @@ curl -X POST "http://localhost:8000/api/proxy/test-service" \
   }'
 ```
 
-## Security Testing
+### Role-Based Access Control
 
-### Running Security Tests
+CipherGate supports four user roles with different data access levels:
+
+- **Admin**: Full data visibility
+- **User**: Partial masking (first/last characters preserved)
+- **Guest**: Complete masking
+- **Auditor**: Full visibility for compliance monitoring
+
+### Security Configuration
+
+Set the master key environment variable for production deployments:
 
 ```bash
-# Install test dependencies
-pip install pytest
-
-# Run security-focused unit tests
-python test_security.py
-
-# Run with verbose output
-pytest test_security.py -v
+export CIPHERGATE_MASTER_KEY="your-64-character-hex-key-here"
+python proxy.py
 ```
-
-### Test Coverage
-
-The security test suite validates:
-
-- **Authentication Bypass Prevention**: Unauthenticated access attempts are blocked
-- **Data Integrity Verification**: Tampered data is detected and rejected
-- **Role-Based Access Control**: Different masking levels work correctly
-- **Cryptographic Operations**: Encryption/decryption maintains data integrity
-- **Compliance Logging**: Audit trails maintain cryptographic integrity
-- **Performance**: High-throughput processing capabilities
 
 ## Performance Characteristics
 
@@ -234,89 +260,42 @@ The security test suite validates:
 - **CPU Optimization**: Efficient cryptographic operations
 - **Network Performance**: Minimal latency addition to proxied requests
 
-## Compliance and Auditing
-
-### Audit Log Example
-```json
-{
-  "event": "pii_masking_applied",
-  "source_ip": "192.168.1.50",
-  "endpoint": "/v1/user/data",
-  "masked_fields": ["email", "credit_card"],
-  "algorithm": "AES-256-GCM",
-  "status": "success"
-}
-```
-
-### Audit Trail Features
-
-- **Cryptographic Chaining**: Each log entry cryptographically linked to previous
-- **Tamper Detection**: Automatic detection of log modification attempts
-- **Real-time Monitoring**: Live security event streaming
-- **Compliance Reports**: Automated GDPR/HIPAA compliance reporting
-
-### Security Monitoring
-
-- **Access Pattern Analysis**: Detection of unusual access patterns
-- **Security Violation Logging**: Automatic logging of policy violations
-- **Performance Monitoring**: Request latency and throughput metrics
-- **Error Tracking**: Detailed error logging for troubleshooting
-
 ## Development and Contribution
 
 ### Code Quality Standards
 
-- **Type Hints**: Full type annotation for maintainability
-- **Documentation**: Comprehensive docstrings and inline comments
-- **Testing**: Security-focused test coverage
-- **Code Review**: Mandatory security review for all changes
+- Type hints for full maintainability
+- Comprehensive docstrings and inline comments
+- Security-focused test coverage
+- Mandatory security review for all changes
 
 ### Security Development Lifecycle
 
-1. **Threat Modeling**: Security requirements analysis
-2. **Secure Coding**: OWASP guidelines compliance
-3. **Security Testing**: Automated security test execution
-4. **Code Review**: Security-focused peer review
-5. **Deployment Security**: Secure deployment practices
-
-## Future Enhancements
-
-### Planned Features
-
-- **Machine Learning Integration**: Anomaly detection for access patterns
-- **Multi-Cloud Support**: Deployment across AWS, Azure, and GCP
-- **Container Orchestration**: Kubernetes-native deployment
-- **Advanced Analytics**: Security metrics and dashboarding
-- **Integration APIs**: Third-party security tool integration
-
-### Research Areas
-
-- **Post-Quantum Cryptography**: Preparation for quantum computing threats
-- **Homomorphic Encryption**: Computation on encrypted data
-- **Blockchain Integration**: Immutable audit trail enhancement
-- **Zero-Knowledge Proofs**: Enhanced privacy-preserving authentication
+1. Threat modeling with security requirements analysis
+2. Secure coding following OWASP guidelines
+3. Automated security test execution
+4. Security-focused peer review
+5. Secure deployment practices
 
 ## Support and Maintenance
 
 ### Security Updates
 
-- **Regular Security Audits**: Quarterly security assessments
-- **Dependency Updates**: Automated security patching
-- **Vulnerability Response**: 24-hour response to critical vulnerabilities
-- **Security Advisories**: Transparent security communication
+- Regular security audits with quarterly assessments
+- Automated dependency updates and security patching
+- 24-hour response to critical vulnerabilities
+- Transparent security communication through advisories
 
 ### Professional Services
 
-- **Implementation Support**: Custom deployment assistance
-- **Security Assessment**: Organization-specific security review
-- **Training Programs**: Zero-Trust architecture training
-- **Compliance Consulting**: Regulatory compliance guidance
+- Custom deployment assistance and implementation support
+- Organization-specific security assessments
+- Zero-Trust architecture training programs
+- Regulatory compliance consulting
 
 ## Author
 
-**Patrick - Computer Engineer** To view other projects and portfolio details, visit:
+**Patrick - Computer Engineer**
+
+To view other projects and portfolio details, visit:
 [https://pklavc.github.io/projects.html](https://pklavc.github.io/projects.html)
-
----
-
-*This project demonstrates advanced expertise in Cybersecurity and Zero-Trust architectures.*

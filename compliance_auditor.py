@@ -1,8 +1,8 @@
 """
-ComplianceAuditor - Tamper-Proof Logging System for CipherGate Security Proxy
+Tamper-proof compliance logging system with asynchronous I/O for CipherGate Security Proxy.
 
-Implements compliance logging aligned with GDPR/HIPAA standards.
-Provides immutable audit trails with cryptographic integrity verification.
+Implements compliance logging aligned with GDPR/HIPAA standards. Provides immutable audit 
+trails with cryptographic integrity verification.
 """
 
 import hashlib
@@ -17,11 +17,10 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 class AuditEventType(Enum):
-    """Types of audit events"""
+    """Types of audit events."""
     ACCESS_ATTEMPT = "access_attempt"
     ACCESS_COMPLETION = "access_completion"
     AUTHENTICATION = "authentication"
@@ -34,7 +33,7 @@ class AuditEventType(Enum):
 
 @dataclass
 class AuditRecord:
-    """Immutable audit record with cryptographic integrity"""
+    """Immutable audit record with cryptographic integrity."""
     timestamp: float
     event_type: str
     user_id: str
@@ -50,12 +49,12 @@ class AuditRecord:
     chain_hash: Optional[str] = None
     
     def __post_init__(self):
-        """Calculate hash for integrity verification"""
+        """Calculate hash for integrity verification."""
         if self.record_hash is None:
             self.record_hash = self._calculate_hash()
     
     def _calculate_hash(self) -> str:
-        """Calculate SHA-256 hash of the record"""
+        """Calculate SHA-256 hash of the record."""
         record_data = {
             'timestamp': self.timestamp,
             'event_type': self.event_type,
@@ -75,16 +74,17 @@ class AuditRecord:
 
 
 class ComplianceAuditor:
-    """Tamper-proof compliance logging system with asynchronous I/O"""
+    """Tamper-proof compliance logging system with asynchronous I/O."""
     
     _instance = None
-    _lock = threading.Lock()
+    _instance_lock = threading.Lock()
     
     def __new__(cls):
         if cls._instance is None:
-            with cls._lock:
+            with cls._instance_lock:
                 if cls._instance is None:
-                    cls._instance = super().__new__(cls)
+                    temp_instance = super().__new__(cls)
+                    cls._instance = temp_instance
         return cls._instance
     
     def __init__(self):
@@ -94,15 +94,14 @@ class ComplianceAuditor:
         self.audit_log: List[AuditRecord] = []
         self.chain_head: Optional[str] = None
         self.lock = threading.RLock()
-        self.log_queue = asyncio.Queue()
+        self.log_queue = None
         self.log_file_path = "audit_log.json"
         self._initialize_chain()
-        # Start background log writer task
         self._log_writer_task = None
         self.initialized = True
         
     def _initialize_chain(self):
-        """Initialize the audit chain with a genesis record"""
+        """Initialize the audit chain with a genesis record."""
         genesis_record = AuditRecord(
             timestamp=time.time(),
             event_type=AuditEventType.AUTHENTICATION.value,
@@ -121,7 +120,7 @@ class ComplianceAuditor:
     def log_access_attempt(self, user_id: str, service_path: str, action: str, 
                           payload_size: int, source_ip: Optional[str] = None,
                           user_agent: Optional[str] = None) -> str:
-        """Log an access attempt"""
+        """Log an access attempt."""
         session_id = self._generate_session_id()
         
         record = AuditRecord(
@@ -146,7 +145,7 @@ class ComplianceAuditor:
     def log_access_completion(self, user_id: str, service_path: str, duration: float,
                              success: bool, session_id: Optional[str] = None,
                              error_message: Optional[str] = None) -> None:
-        """Log access completion"""
+        """Log access completion."""
         record = AuditRecord(
             timestamp=time.time(),
             event_type=AuditEventType.ACCESS_COMPLETION.value,
@@ -168,7 +167,7 @@ class ComplianceAuditor:
                           source_ip: Optional[str] = None,
                           user_agent: Optional[str] = None,
                           error_message: Optional[str] = None) -> None:
-        """Log authentication events"""
+        """Log authentication events."""
         record = AuditRecord(
             timestamp=time.time(),
             event_type=AuditEventType.AUTHENTICATION.value,
@@ -187,7 +186,7 @@ class ComplianceAuditor:
     
     def log_data_access(self, user_id: str, data_type: str, masked: bool,
                        session_id: Optional[str] = None) -> None:
-        """Log data access events"""
+        """Log data access events."""
         record = AuditRecord(
             timestamp=time.time(),
             event_type=AuditEventType.DATA_ACCESS.value,
@@ -206,7 +205,7 @@ class ComplianceAuditor:
     
     def log_masking_applied(self, user_id: str, pattern_type: str, 
                            masking_level: str, session_id: Optional[str] = None) -> None:
-        """Log when data masking is applied"""
+        """Log when data masking is applied."""
         record = AuditRecord(
             timestamp=time.time(),
             event_type=AuditEventType.MASKING_APPLIED.value,
@@ -226,7 +225,7 @@ class ComplianceAuditor:
     def log_encryption_operation(self, user_id: str, operation: str, 
                                 algorithm: str, success: bool,
                                 session_id: Optional[str] = None) -> None:
-        """Log encryption/decryption operations"""
+        """Log encryption/decryption operations."""
         record = AuditRecord(
             timestamp=time.time(),
             event_type=AuditEventType.ENCRYPTION_OPERATION.value,
@@ -245,7 +244,7 @@ class ComplianceAuditor:
     
     def log_security_violation(self, user_id: str, violation_type: str,
                               details: Dict[str, Any], source_ip: Optional[str] = None) -> None:
-        """Log security violations"""
+        """Log security violations."""
         record = AuditRecord(
             timestamp=time.time(),
             event_type=AuditEventType.SECURITY_VIOLATION.value,
@@ -264,7 +263,7 @@ class ComplianceAuditor:
         self._add_record(record)
     
     def _add_record(self, record: AuditRecord) -> None:
-        """Add a record to the audit log with chain integrity"""
+        """Add a record to the audit log with chain integrity."""
         with self.lock:
             if self.audit_log:
                 previous_record = self.audit_log[-1]
@@ -276,6 +275,18 @@ class ComplianceAuditor:
             
             self.audit_log.append(record)
             self.chain_head = record.chain_hash
+            
+            if self.log_queue is None:
+                try:
+                    loop = asyncio.get_running_loop()
+                    self.log_queue = asyncio.Queue()
+                except RuntimeError:
+                    try:
+                        asyncio.run(self._write_record_to_disk(record))
+                        return
+                    except Exception as e:
+                        logger.error(f"Failed to write audit record synchronously: {e}")
+                        return
             
             if self._log_writer_task is None or self._log_writer_task.done():
                 try:
@@ -298,7 +309,10 @@ class ComplianceAuditor:
             
             try:
                 loop = asyncio.get_running_loop()
-                asyncio.run_coroutine_threadsafe(self.log_queue.put(record), loop)
+                if self.log_queue is not None:
+                    asyncio.run_coroutine_threadsafe(self.log_queue.put(record), loop)
+                else:
+                    asyncio.run(self._write_record_to_disk(record))
             except RuntimeError:
                 try:
                     asyncio.run(self._write_record_to_disk(record))
@@ -308,17 +322,15 @@ class ComplianceAuditor:
             logger.info(f"Audit: {record.event_type} - User: {record.user_id} - Action: {record.action}")
     
     async def _background_log_writer(self):
-        """Background task to write logs to disk asynchronously"""
+        """Background task to write logs to disk asynchronously."""
         try:
             while True:
-                # Get record from queue (this will block until a record is available)
-                record = await self.log_queue.get()
-                
-                # Write to disk asynchronously
-                await self._write_record_to_disk(record)
-                
-                # Mark task as done
-                self.log_queue.task_done()
+                if self.log_queue is not None:
+                    record = await self.log_queue.get()
+                    await self._write_record_to_disk(record)
+                    self.log_queue.task_done()
+                else:
+                    break
                 
         except asyncio.CancelledError:
             logger.info("Background log writer task cancelled")
@@ -326,13 +338,11 @@ class ComplianceAuditor:
             logger.error(f"Error in background log writer: {e}")
     
     async def _write_record_to_disk(self, record: AuditRecord):
-        """Write a single record to disk asynchronously"""
+        """Write a single record to disk asynchronously."""
         try:
-            # Convert record to JSON
             record_data = asdict(record)
             record_json = json.dumps(record_data, separators=(',', ':'))
             
-            # Write to file asynchronously
             async with aiofiles.open(self.log_file_path, 'a', encoding='utf-8') as f:
                 await f.write(record_json + '\n')
                 
@@ -340,12 +350,11 @@ class ComplianceAuditor:
             logger.error(f"Failed to write audit record to disk: {e}")
     
     async def flush_logs(self):
-        """Wait for all pending logs to be written to disk"""
+        """Wait for all pending logs to be written to disk."""
         try:
-            # Wait for all items in queue to be processed
-            await self.log_queue.join()
+            if self.log_queue is not None:
+                await self.log_queue.join()
             
-            # Cancel the background writer task
             if self._log_writer_task and not self._log_writer_task.done():
                 self._log_writer_task.cancel()
                 try:
@@ -357,12 +366,12 @@ class ComplianceAuditor:
             logger.error(f"Error flushing logs: {e}")
     
     def _generate_session_id(self) -> str:
-        """Generate a unique session ID"""
+        """Generate a unique session ID."""
         return f"session_{int(time.time() * 1000)}_{hash(str(time.time())) % 10000}"
     
     def verify_integrity(self) -> Dict[str, Any]:
         """
-        Verify the integrity of the audit log
+        Verify the integrity of the audit log.
         
         Returns:
             Dictionary with verification results
@@ -371,7 +380,6 @@ class ComplianceAuditor:
             if not self.audit_log:
                 return {"integrity": False, "error": "Empty audit log"}
             
-            # Verify chain integrity
             current_chain = self.audit_log[0].chain_hash
             for i in range(1, len(self.audit_log)):
                 record = self.audit_log[i]
@@ -389,7 +397,6 @@ class ComplianceAuditor:
                 
                 current_chain = record.chain_hash
             
-            # Verify individual record hashes
             for i, record in enumerate(self.audit_log):
                 calculated_hash = record._calculate_hash()
                 if record.record_hash != calculated_hash:
@@ -415,7 +422,7 @@ class ComplianceAuditor:
                        user_id: Optional[str] = None,
                        event_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Get audit trail with optional filtering
+        Get audit trail with optional filtering.
         
         Args:
             start_time: Filter records after this timestamp
@@ -445,7 +452,7 @@ class ComplianceAuditor:
     
     def export_audit_log(self, format: str = "json") -> str:
         """
-        Export audit log in specified format
+        Export audit log in specified format.
         
         Args:
             format: Export format (json, csv)
@@ -466,7 +473,7 @@ class ComplianceAuditor:
     
     def get_compliance_report(self) -> Dict[str, Any]:
         """
-        Generate a compliance report for GDPR/HIPAA
+        Generate a compliance report for GDPR/HIPAA.
         
         Returns:
             Compliance report with statistics and integrity verification
@@ -474,17 +481,14 @@ class ComplianceAuditor:
         with self.lock:
             integrity_check = self.verify_integrity()
             
-            # Count events by type
             event_counts = {}
             for record in self.audit_log:
                 event_type = record.event_type
                 event_counts[event_type] = event_counts.get(event_type, 0) + 1
             
-            # Count successful vs failed operations
             success_count = sum(1 for record in self.audit_log if record.success)
             failure_count = len(self.audit_log) - success_count
             
-            # Get time range
             if self.audit_log:
                 time_range = {
                     "start": datetime.fromtimestamp(self.audit_log[0].timestamp, tz=timezone.utc).isoformat(),
