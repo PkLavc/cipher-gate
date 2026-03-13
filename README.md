@@ -299,3 +299,5 @@ python proxy.py
 
 To view other projects and portfolio details, visit:
 [https://pklavc.github.io/projects.html](https://pklavc.github.io/projects.html)
+
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor%20me-%23ea4aaa?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/PkLavc)
