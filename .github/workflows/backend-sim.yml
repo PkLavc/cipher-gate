@@ -1,0 +1,106 @@
+name: Backend Simulation Data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  generate-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate backend-sim payload and history
+        run: |
+          mkdir -p api
+          python - <<'PY'
+          import json
+          import random
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          api_dir = Path('api')
+          status_path = api_dir / 'status.json'
+          history_path = api_dir / 'history.json'
+
+          now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+          latency = random.randint(60, 199)
+          success_rate = round(random.uniform(98.0, 99.9), 1)
+          events = random.randint(800, 5800)
+          run_id = '${{ github.run_id }}'
+          project = '${{ github.event.repository.name }}'
+
+          entry = {
+              'timestamp': now,
+              'latencyMs': latency,
+              'successRate': success_rate,
+              'eventsProcessed': events
+          }
+
+          history = []
+          if history_path.exists():
+              try:
+                  loaded = json.loads(history_path.read_text(encoding='utf-8'))
+                  if isinstance(loaded, list):
+                      history = loaded
+              except Exception:
+                  history = []
+
+          history.append(entry)
+          history = history[-28:]
+
+          status = {
+              'service': 'backend-sim',
+              'project': project,
+              'status': 'ok',
+              'source': 'github-actions',
+              'lastUpdated': now,
+              'runId': run_id,
+              'historyCount': len(history),
+              'metrics': {
+                  'latencyMs': latency,
+                  'successRate': success_rate,
+                  'eventsProcessed': events
+              }
+          }
+
+          status_path.write_text(json.dumps(status, indent=2) + '\n', encoding='utf-8')
+          history_path.write_text(json.dumps(history, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Commit payload files
+        id: commit_payload
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add api/status.json api/history.json
+
+          if git diff --cached --quiet; then
+            echo "push_failed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "chore: refresh backend simulation data"
+
+          if git push; then
+            echo "push_failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not push backend simulation data. Uploading artifact fallback."
+            mkdir -p simulation-artifact
+            cp api/status.json simulation-artifact/status.json
+            cp api/history.json simulation-artifact/history.json
+            echo "push_failed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload simulation artifact fallback
+        if: steps.commit_payload.outputs.push_failed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-sim-${{ github.event.repository.name }}-${{ github.run_id }}
+          path: simulation-artifact/
+          if-no-files-found: ignore

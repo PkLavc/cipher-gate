@@ -1,0 +1,13 @@
+{
+  "service": "backend-sim",
+  "project": "cipher-gate",
+  "status": "ok",
+  "source": "github-actions",
+  "lastUpdated": "pending-first-workflow-run",
+  "runId": "manual",
+  "metrics": {
+    "latencyMs": 88,
+    "successRate": 99.6,
+    "eventsProcessed": 2510
+  }
+}
