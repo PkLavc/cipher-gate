@@ -3,12 +3,12 @@
   "project": "cipher-gate",
   "status": "ok",
   "source": "github-actions",
-  "lastUpdated": "2026-04-30T19:04:22Z",
-  "runId": "25184076323",
+  "lastUpdated": "2026-05-01T01:53:54Z",
+  "runId": "25198532084",
   "historyCount": 28,
   "metrics": {
-    "latencyMs": 113,
-    "successRate": 98.4,
-    "eventsProcessed": 4032
+    "latencyMs": 120,
+    "successRate": 98.2,
+    "eventsProcessed": 5723
   }
 }
