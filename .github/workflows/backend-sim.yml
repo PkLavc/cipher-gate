@@ -1,9 +1,13 @@
 name: Backend Simulation Data
 
+# Triggers commented out — workflow is disabled and will not run on schedule or manually.
+# To re-enable, uncomment the lines below.
+# on:
+#   workflow_dispatch:
+#   schedule:
+#     - cron: '0 */6 * * *'
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 */6 * * *'
+  workflow_call:
 
 permissions:
   contents: write
