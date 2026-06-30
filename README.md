@@ -1,5 +1,11 @@
 # CipherGate Security Proxy
 
+## Portfolio Case Study
+
+Full case study: https://pklavc.com/projects/cipher-gate-proxy/
+
+This repository is part of my backend security portfolio. It demonstrates API proxy design, encryption boundaries, request filtering, masking, zero-trust service patterns, and Python backend security processing.
+
 [![Python Version](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![Security](https://img.shields.io/badge/Security-Zero--Trust-red.svg)](https://github.com/PkLavc/cipher-gate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
